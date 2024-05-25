@@ -225,3 +225,22 @@ def patched_prepare_4d_causal_attention_mask_for_sdpa(
         mask_2d_to_4d(attention_mask, dtype=dtype),
         *args,
     )
+
+def prepare_4d_prefix_attention_mask(
+    attention_mask: Optional[torch.Tensor],
+    prefix_locations: Optional[torch.Tensor],
+    *args,
+):
+    # prefix_locations is a tensor of shape (batch_size, seq_len, 2) where the last dimension is the start and end of the prefix
+    dtype = torch.bfloat16 if is_torch_bf16_gpu_available() else torch.float32
+    attention_mask = mask_2d_to_4d(attention_mask, dtype=dtype)
+    # use prefix locations that will set columns to 1 where the prefix is
+    if prefix_locations is not None:
+        bsz, tgt_len, _ = attention_mask.size()
+        prefix_mask = torch.zeros_like(attention_mask)
+        for i in range(bsz):
+            start, end = prefix_locations[i]
+            prefix_mask[i, :, start:end] = 1
+        attention_mask = attention_mask + prefix_mask
+    
+    return attention_mask
